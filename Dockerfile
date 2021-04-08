@@ -95,14 +95,8 @@ RUN \
     tesseract-ocr \
     patch \
   && c_rehash \
-  && echo "deb http://apt.postgresql.org/pub/repos/apt buster-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
-  && curl -L https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
   && apt-get update \
-  && if apt-cache show postgresql-client-13 > /dev/null 2>&1 ; then \
-        apt-get install --no-install-recommends -y postgresql-client-13 ; \
-    else \
-        apt-get install --no-install-recommends -y postgresql-client ; \
-    fi \
+  && apt install -y libmariadb3 mariadb-client \
   && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
   && source $HOME/.cargo/env \
   && python3 -m pip install --no-cache-dir --upgrade pip wheel \
@@ -125,6 +119,7 @@ RUN \
   esac \
   && python3 -c 'from phply.phpparse import make_parser; make_parser()' \
   && ln -s /usr/local/share/weblate/examples/ /app/ \
+  && sed -i -e 's/POSTGRES_/MYSQL_/g' -e 's/django.db.backends.postgresql/django.db.backends.mysql/' -e 's/{"sslmode".*}/{"charset": "utf8mb4"}/' /usr/local/lib/python3.7/dist-packages/weblate/settings_docker.py \
   && apt-get -y purge \
     python3-dev \
     pkg-config \

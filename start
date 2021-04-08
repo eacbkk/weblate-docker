@@ -9,7 +9,6 @@ chmod 600 /app/data/ssh/id_rsa 2>/dev/null || true
 
 # Generate secret
 if [ ! -f /app/data/secret ] ; then
-    echo "Generating Django secret..."
     # https://github.com/django/django/blob/1.10.2/django/utils/crypto.py#L54-L56
     python3 -c "from django.utils.crypto import get_random_string; print(get_random_string(50))" > /app/data/secret
 fi
@@ -32,17 +31,15 @@ export WEBLATE_CMD="/usr/local/bin/weblate"
 export WEBLATE_PY_PATH="/app/data/python/customize"
 
 # Provide sane default value
-if [ -z "$POSTGRES_SSL_MODE" ] ; then
-    export POSTGRES_SSL_MODE="prefer"
+if [ -z "$MYSQL_SSL_MODE" ] ; then
+    export MYSQL_SSL_MODE="prefer"
 fi
-
-# Export variables for psql use
-export PGPASSWORD="$POSTGRES_PASSWORD"
-export PGSSLMODE="$POSTGRES_SSL_MODE"
 
 # Update the time zone
 zonefile="/usr/share/zoneinfo/$WEBLATE_TIME_ZONE"
 if [ -n "$WEBLATE_TIME_ZONE" ] && [ -f "$zonefile" ] ; then
+    echo "Updating system timezone to $WEBLATE_TIME_ZONE"
+    echo "$WEBLATE_TIME_ZONE" > /etc/timezone
     cat "/usr/share/zoneinfo/$WEBLATE_TIME_ZONE" > /etc/localtime
 fi
 
@@ -84,28 +81,27 @@ until run_weblate shell -c 'from django.core.cache import cache; cache.has_key("
     sleep 1
 done
 
-if [ -z "$POSTGRES_HOST" ] ; then
-    export POSTGRES_HOST=database
+if [ -z "$MYSQL_HOST" ] ; then
+    export MYSQL_HOST=database
 fi
-if [ -z "$POSTGRES_PORT" ] ; then
-    export POSTGRES_PORT=
+if [ -z "$MYSQL_PORT" ] ; then
+    export MYSQL_PORT=
 fi
 
 # Wait for database to get available
 TIMEOUT=0
-until psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -d "$POSTGRES_DATABASE" -U "$POSTGRES_USER" -c 'SELECT 1' > /dev/null ; do
-    >&2 echo "Postgres is unavailable - waiting $((30 - TIMEOUT))"
+until mariadb -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -e 'SELECT 1' > /dev/null ; do
+    >&2 echo "MariaDB is unavailable - waiting $((30 - TIMEOUT))"
     TIMEOUT=$((TIMEOUT + 1))
     if [ $TIMEOUT -gt 30 ] ; then
-        psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -d "$POSTGRES_DATABASE" -U "$POSTGRES_USER" -c 'SELECT 1'
-        fail_dep PosgreSQL
+        fail_dep MariaDB
     fi
     sleep 1
 done
 
-unset PGPASSWORD
+mariadb -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -e 'ALTER DATABASE weblate CHARACTER SET utf8mb4';
 
->&2 echo "Postgres is up"
+>&2 echo "MARIADB is up"
 
 # Migrate database to current version and collect static files
 if [ "x$1" = "xrunserver" ] ; then
